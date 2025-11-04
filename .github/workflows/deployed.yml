@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # full history for better analysis
+          fetch-depth: 0
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v5.0.0
@@ -68,28 +68,27 @@ jobs:
           tags: ameya1512/tic-tac:latest
           file: ./Dockerfile
 
-deploy_to_eks:
-  runs-on: self-hosted
-  needs: build_docker_image_and_push
-  steps:
-    - uses: actions/checkout@v4
+  deploy_to_eks:   # ✅ Correctly placed under jobs:
+    runs-on: self-hosted
+    needs: build_docker_image_and_push
+    steps:
+      - uses: actions/checkout@v4
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ap-south-1
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
 
-    - name: Update kubeconfig for EKS
-      run: aws eks --region ap-south-1 update-kubeconfig --name EKS_CLOUD
+      - name: Update kubeconfig for EKS
+        run: aws eks --region ap-south-1 update-kubeconfig --name EKS_CLOUD
 
-    - name: Deploy to Kubernetes
-      run: |
-        kubectl delete -f deployment-service.yml || true
-        kubectl apply -f deployment-service.yml
-        kubectl rollout status deployment/game-deployment --timeout=120s
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl delete -f deployment-service.yml || true
+          kubectl apply -f deployment-service.yml
+          kubectl rollout status deployment/game-deployment --timeout=120s
 
-    - name: Verify Deployment
-      run: kubectl get pods -o wide
-
+      - name: Verify Deployment
+        run: kubectl get pods -o wide
