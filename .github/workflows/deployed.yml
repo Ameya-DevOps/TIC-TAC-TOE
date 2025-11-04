@@ -1,38 +1,69 @@
-name: Build,Analyze,scan
+name: CICD Pipeline
 
 on:
   push:
-    branches:
-      - main
-
+    branches: [ "main" ]
 
 jobs:
-  build-analyze-scan:
-    name: Build
-    runs-on: [self-hosted]
+  compile:
+    runs-on: self-hosted
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis 
-  
-      - name: Deploy to container
-        run: | 
-          docker stop game
-          docker rm game
-        
-      - name: Update kubeconfig
-        run: aws eks --region ap-south-1 update-kubeconfig --name EKS_CLOUD
+      - uses: actions/checkout@v4
 
-      - name: Deploy to kubernetes
-        run: kubectl delete -f deployment-service.yml
-  
-      - name: Send a Slack Notification
-        if: always()
-        uses: act10ns/slack@v1
+      - name: Trivy FS Scan
+        run: trivy fs --format table -o fs-report.json .
+
+      - name: Install Gitleaks
+        run: sudo apt install gitleaks -y
+
+      - name: Run Gitleaks Code Scan
+        run: gitleaks detect --source . --report-format json --report-path gitleaks-report.json
+
+  sonar_scan:
+    runs-on: self-hosted
+    needs: compile
+    steps:
+      - uses: actions/checkout@v4
         with:
-          status: ${{ job.status }}
-          steps: ${{ toJson(steps) }}
-          channel: '#githubactions-eks'
+          fetch-depth: 0  # full history for better analysis
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v5.0.0
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+
+      - name: SonarQube Quality Gate check
+        id: sonarqube-quality-gate-check
+        uses: SonarSource/sonarqube-quality-gate-action@master
+        with:
+          pollingTimeoutSec: 600
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+
+  build_docker_image_and_push:
+    runs-on: self-hosted
+    needs: sonar_scan
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ameya1512/tic-tac:latest
+          file: ./Dockerfile
