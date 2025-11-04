@@ -75,7 +75,7 @@ jobs:
     
 
       - name: Docker pull image
-        run: docker pull tic-tac:latest
+        run: docker pull ameya1512/tic-tac:latest
 
       - name: Update kubeconfig for EKS
         run: docker run -d --name -p 3000:3000 ameya1512/tic-tac:latest
