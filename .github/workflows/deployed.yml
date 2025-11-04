@@ -72,23 +72,19 @@ jobs:
     runs-on: self-hosted
     needs: build_docker_image_and_push
     steps:
-      - uses: actions/checkout@v4
+    
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-south-1
+      - name: Docker pull image
+        run: docker pull tic-tac:latest
 
       - name: Update kubeconfig for EKS
+        run: docker run -d --name -p 3000:3000 ameya1512/tic-tac:latest
+        
+      - name: deploy to contaier
         run: aws eks --region ap-south-1 update-kubeconfig --name EKS_CLOUD
 
-      - name: Deploy to Kubernetes
-        run: |
-          kubectl delete -f deployment-service.yml || true
-          kubectl apply -f deployment-service.yml
-          kubectl rollout status deployment/game-deployment --timeout=120s
+      - name: deploy to kuberntes
+        run: kubectl apply -f deployment-service.yml
 
       - name: Verify Deployment
         run: kubectl get pods -o wide
